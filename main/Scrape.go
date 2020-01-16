@@ -8,24 +8,49 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
 // File contains information relating to an individual file on canvas
 type File struct {
-	ID          int
-	URL         string
-	DisplayName string
+	ID                 int         `json:"id"`
+	UUID               string      `json:"uuid"`
+	FolderID           int         `json:"folder_id"`
+	DisplayName        string      `json:"display_name"`
+	Filename           string      `json:"filename"`
+	UploadStatus       string      `json:"upload_status"`
+	ContentType        string      `json	:"content-type"`
+	URL                string      `json:"url"`
+	Size               int         `json:"size"`
+	CreatedAt          time.Time   `json:"created_at"`
+	UpdatedAt          time.Time   `json:"updated_at"`
+	UnlockAt           interface{} `json:"unlock_at"`
+	Locked             bool        `json:"locked"`
+	Hidden             bool        `json:"hidden"`
+	LockAt             interface{} `json:"lock_at"`
+	HiddenForUser      bool        `json:"hidden_for_user"`
+	ThumbnailURL       interface{} `json:"thumbnail_url"`
+	ModifiedAt         time.Time   `json:"modified_at"`
+	MimeClass          string      `json:"mime_class"`
+	MediaEntryID       interface{} `json:"media_entry_id"`
+	LockedForUser      bool        `json:"locked_for_user"`
+	CanvadocSessionURL string      `json:"canvadoc_session_url"`
+	CrocodocSessionURL interface{} `json:"crocodoc_session_url"`
 }
 
 // Folder contains information relating to folders on canvas
 type Folder struct {
-	ID              int
-	Files           []File
-	SubDirectories  *Folder
-	Name            string
-	ParentDirectory *Folder
+	ID        int    `json:"id"`
+	Title     string `json:"title"`
+	Position  int    `json:"position"`
+	Indent    int    `json:"indent"`
+	Type      string `json:"type"`
+	ModuleID  int    `json:"module_id"`
+	HTMLURL   string `json:"html_url"`
+	ContentID int    `json:"content_id"`
+	URL       string `json:"url"`
 }
 
 // Requester is a structure used in the http request to contain related data
@@ -104,7 +129,6 @@ func getCourses(r Requester) ([]Course, error) {
 	println("Executing request")
 	resp, err := client.Do(req)
 	println("Executed.")
-	// return Courses, nil
 	if err != nil {
 		println("Error in request")
 		return nil, err
@@ -119,18 +143,76 @@ func getCourses(r Requester) ([]Course, error) {
 	return courses, nil
 }
 
-func getCourseModules(r Requester, courses []Course) ([]Module, error) {
-	modules := map[Course][]Module
+func getCourseModules(r Requester, courses []Course) error {
+
 	client := &http.Client{}
 
 	for _, course := range courses {
-		req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+string(course.ID)+"/modules/", nil)
+		req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/modules/", nil)
+		if err != nil {
+			return err
+		}
+		// println("https://" + r.BaseURL + r.Context + strconv.Itoa(course.ID) + "/modules/")
+
 		req.Header.Add("Authorization", r.Headers["Authorization"])
 		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
 		defer resp.Body.Close()
+		modules := make([]Module, 0)
+		body, err := ioutil.ReadAll(resp.Body)
+		// fmt.Printf("%s", body)
+		json.Unmarshal(body, &modules)
 
+		// fmt.Printf("%v", modules)
+		for _, module := range modules {
+
+			req, err = http.NewRequest("GET", module.ItemsURL, nil)
+			req.Header.Add("Authorization", r.Headers["Authorization"])
+			if err != nil {
+				return err
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			folders := make([]Folder, 0)
+			body, err = ioutil.ReadAll(resp.Body)
+			json.Unmarshal(body, &folders)
+			// fmt.Printf("%v", folders)
+			println("extracted folders")
+
+			for _, folder := range folders {
+				if !strings.Contains(folder.URL, "/pages/") {
+					req, err = http.NewRequest("GET", folder.URL, nil)
+					println(folder.URL)
+					req.Header.Add("Authorization", r.Headers["Authorization"])
+					if err != nil {
+						return err
+					}
+					resp, err := client.Do(req)
+					if err != nil {
+						return err
+					}
+					defer resp.Body.Close()
+					files := make([]File, 0)
+					body, err = ioutil.ReadAll(resp.Body)
+					json.Unmarshal(body, &files)
+					fmt.Printf("%s\n", body)
+					// fmt.Printf("%v\n", files)
+				}
+			}
+		}
 	}
+
+	return nil
 }
+
+var (
+	authToken string
+)
 
 func main() {
 
@@ -138,12 +220,13 @@ func main() {
 	authorisationTokenPtr := flag.String("auth", "", "Authorisation key from canvas")
 
 	flag.Parse()
-	if *authorisationTokenPtr == "" {
-		println("ERROR: Please enter an authorisation token!")
-		os.Exit(0)
-	}
+
 	headers := make(map[string]string)
-	headers["Authorization"] = "Bearer " + *authorisationTokenPtr
+	if *authorisationTokenPtr != "" {
+		headers["Authorization"] = "Bearer " + *authorisationTokenPtr
+	} else {
+		headers["Authorization"] = "Bearer " + authToken
+	}
 
 	requester := Requester{
 		Context: "/api/v1/courses?per_page=1000",
@@ -159,4 +242,10 @@ func main() {
 		fmt.Printf("%d", len(courses))
 	}
 	requester.Context = "/api/v1/courses/"
+
+	err = getCourseModules(requester, courses)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 }
