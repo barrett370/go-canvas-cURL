@@ -5,9 +5,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+
 	"strconv"
 	"strings"
 	"time"
@@ -143,11 +146,40 @@ func getCourses(r Requester) ([]Course, error) {
 	return courses, nil
 }
 
+// DownloadFile downloads files to a given filepath from a given URL using data in a Requester Struct
+func DownloadFile(filepath string, url string, r Requester) error {
+
+	// Get the data
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	req.Header.Add("Authorization", r.Headers["Authorization"])
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	// Create the file
+	out, err := os.Create(filepath)
+
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// // Write the body to file
+
+	_, err = io.Copy(out, resp.Body)
+	return nil
+}
+
 func getCourseModules(r Requester, courses []Course) error {
 
 	client := &http.Client{}
 
 	for _, course := range courses {
+		os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 		req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/modules/", nil)
 		if err != nil {
 			return err
@@ -182,26 +214,37 @@ func getCourseModules(r Requester, courses []Course) error {
 			body, err = ioutil.ReadAll(resp.Body)
 			json.Unmarshal(body, &folders)
 			// fmt.Printf("%v", folders)
-			println("extracted folders")
+			// println("extracted folders")
 
 			for _, folder := range folders {
-				if !strings.Contains(folder.URL, "/pages/") {
-					req, err = http.NewRequest("GET", folder.URL, nil)
-					println(folder.URL)
-					req.Header.Add("Authorization", r.Headers["Authorization"])
-					if err != nil {
-						return err
+				if folder.URL != "" {
+					if !strings.Contains(folder.URL, "/pages/") {
+						if !strings.Contains(folder.URL, "/quizzes/") {
+							println("Extracting files from " + folder.Title)
+							req, err = http.NewRequest("GET", folder.URL, nil)
+							println(folder.URL)
+							req.Header.Add("Authorization", r.Headers["Authorization"])
+							if err != nil {
+								return err
+							}
+							resp, err := client.Do(req)
+							if err != nil {
+								return err
+							}
+							defer resp.Body.Close()
+							// files := make([]File, 0)
+							var file File
+							body, err = ioutil.ReadAll(resp.Body)
+							json.Unmarshal(body, &file)
+							// fmt.Printf("%s\n", body)
+							// fmt.Printf("%v\n", f)
+							// for _, file := range files {
+							println("Downloading " + file.DisplayName)
+							filename := strings.ReplaceAll(("out/" + course.Name + "/" + file.Filename), " ", "")
+							DownloadFile(filename, file.URL, r)
+							// }
+						}
 					}
-					resp, err := client.Do(req)
-					if err != nil {
-						return err
-					}
-					defer resp.Body.Close()
-					files := make([]File, 0)
-					body, err = ioutil.ReadAll(resp.Body)
-					json.Unmarshal(body, &files)
-					fmt.Printf("%s\n", body)
-					// fmt.Printf("%v\n", files)
 				}
 			}
 		}
@@ -239,7 +282,7 @@ func main() {
 		log.Fatal(err)
 	} else {
 		print("Scraped Courses:")
-		fmt.Printf("%d", len(courses))
+		fmt.Printf("%d\n", len(courses))
 	}
 	requester.Context = "/api/v1/courses/"
 
