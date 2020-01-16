@@ -35,8 +35,8 @@ type Requester struct {
 	BaseURL string
 }
 
-// Module is the toplevel struct containing all data related to an individual module
-type Module []struct {
+// Course is the toplevel struct containing all data related to an individual Course
+type Course struct {
 	ID                          int         `json:"id"`
 	Name                        string      `json:"name"`
 	AccountID                   int         `json:"account_id"`
@@ -77,32 +77,59 @@ type Module []struct {
 	Locale                           string `json:"locale,omitempty"`
 }
 
-func getModules(r Requester) ([]Module, error) {
+// Module is a struct containing subset of course information known as a 'module'
+type Module struct {
+	ID                        int           `json:"id"`
+	Name                      string        `json:"name"`
+	Position                  int           `json:"position"`
+	UnlockAt                  interface{}   `json:"unlock_at"`
+	RequireSequentialProgress bool          `json:"require_sequential_progress"`
+	PublishFinalGrade         bool          `json:"publish_final_grade"`
+	PrerequisiteModuleIds     []interface{} `json:"prerequisite_module_ids"`
+	State                     string        `json:"state"`
+	CompletedAt               time.Time     `json:"completed_at"`
+	ItemsCount                int           `json:"items_count"`
+	ItemsURL                  string        `json:"items_url"`
+}
+
+func getCourses(r Requester) ([]Course, error) {
 	if len(r.Headers) == 0 {
 		return nil, errors.New("Empty headers")
 	}
 	println("Creating client")
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+"/courses", nil)
+	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context, nil)
 	req.Header.Add("Authorization", r.Headers["Authorization"])
 	println("https://" + r.BaseURL + r.Context)
 	println("Executing request")
 	resp, err := client.Do(req)
 	println("Executed.")
-	// return modules, nil
+	// return Courses, nil
 	if err != nil {
 		println("Error in request")
 		return nil, err
 	}
 	defer resp.Body.Close()
-	println("creating modules array")
-	modules := make([]Module, 0)
-	println("Reading modules")
+	println("creating Courses array")
+	courses := make([]Course, 0)
+	println("Reading Courses")
 	body, err := ioutil.ReadAll(resp.Body)
-	println(string(body))
-	println("Unmarshalling modules")
-	json.Unmarshal(body, &modules)
-	return modules, nil
+	println("Unmarshalling Courses")
+	json.Unmarshal(body, &courses)
+	return courses, nil
+}
+
+func getCourseModules(r Requester, courses []Course) ([]Module, error) {
+	modules := map[Course][]Module
+	client := &http.Client{}
+
+	for _, course := range courses {
+		req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+string(course.ID)+"/modules/", nil)
+		req.Header.Add("Authorization", r.Headers["Authorization"])
+		resp, err := client.Do(req)
+		defer resp.Body.Close()
+
+	}
 }
 
 func main() {
@@ -119,17 +146,17 @@ func main() {
 	headers["Authorization"] = "Bearer " + *authorisationTokenPtr
 
 	requester := Requester{
-		Context: "/api/v1",
+		Context: "/api/v1/courses?per_page=1000",
 		Headers: headers,
 		BaseURL: *baseURLPtr,
 	}
 
-	modules, err := getModules(requester)
+	courses, err := getCourses(requester)
 	if err != nil {
 		log.Fatal(err)
 	} else {
-		println("Scraped Modules:")
-		fmt.Printf("%v", modules)
+		print("Scraped Courses:")
+		fmt.Printf("%d", len(courses))
 	}
-
+	requester.Context = "/api/v1/courses/"
 }
