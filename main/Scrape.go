@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-
 	"strconv"
 	"strings"
 	"time"
@@ -120,7 +119,7 @@ type Module struct {
 	ItemsURL                  string        `json:"items_url"`
 }
 
-func getCourses(r Requester) ([]Course, error) {
+func getCourses(r Requester, spec []string) ([]Course, error) {
 	if len(r.Headers) == 0 {
 		return nil, errors.New("Empty headers")
 	}
@@ -143,7 +142,15 @@ func getCourses(r Requester) ([]Course, error) {
 	body, err := ioutil.ReadAll(resp.Body)
 	println("Unmarshalling Courses")
 	json.Unmarshal(body, &courses)
-	return courses, nil
+	ret := make([]Course, 0)
+	for _, course := range courses {
+		for _, specifiedCourse := range spec {
+			if course.Name == specifiedCourse {
+				ret = append(ret, course)
+			}
+		}
+	}
+	return ret, nil
 }
 
 // DownloadFile downloads files to a given filepath from a given URL using data in a Requester Struct
@@ -261,7 +268,8 @@ func main() {
 
 	baseURLPtr := flag.String("baseUrl", "canvas.bham.ac.uk", "baseUrl for canvas curl, default canvas.bham.ac.uk")
 	authorisationTokenPtr := flag.String("auth", "", "Authorisation key from canvas")
-
+	requirementsFile := flag.String("requirementsFile", "", "txt file containing list of desired modules")
+	course := flag.String("module", "", "Specific module to scrape")
 	flag.Parse()
 
 	headers := make(map[string]string)
@@ -276,8 +284,20 @@ func main() {
 		Headers: headers,
 		BaseURL: *baseURLPtr,
 	}
+	var spec []string
+	if *requirementsFile != "" {
+		dat, err := ioutil.ReadFile(*requirementsFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		strData := string(dat)
+		println(strData)
+		spec = strings.Split(strData, "\n")
 
-	courses, err := getCourses(requester)
+	} else if *course != "" {
+		spec = append(spec, *course)
+	}
+	courses, err := getCourses(requester, spec)
 	if err != nil {
 		log.Fatal(err)
 	} else {
