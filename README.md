@@ -5,5 +5,7 @@
 to use build using:
 
 ```bash
-    go build -ldflags "-X main.authToken=<CANVAS_API_TOKEN>" main/Scrape.go
+    make build
 ```
+
+with your Canvas API token exported on your path as CANVAS_TOKEN
