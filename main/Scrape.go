@@ -60,6 +60,7 @@ type Requester struct {
 	Context string
 	Headers map[string]string
 	BaseURL string
+	Ignore  []string
 }
 
 // Course is the toplevel struct containing all data related to an individual Course
@@ -143,19 +144,30 @@ func getCourses(r Requester, spec []string) ([]Course, error) {
 	println("Unmarshalling Courses")
 	json.Unmarshal(body, &courses)
 	ret := make([]Course, 0)
-	for _, course := range courses {
-		for _, specifiedCourse := range spec {
-			if course.Name == specifiedCourse {
-				ret = append(ret, course)
+	if len(spec) > 0 {
+		println("filtering discovered courses")
+		for _, course := range courses {
+			for _, specifiedCourse := range spec {
+				if course.Name == specifiedCourse {
+					ret = append(ret, course)
+				}
 			}
 		}
+	} else {
+		ret = courses
 	}
 	return ret, nil
 }
 
 // DownloadFile downloads files to a given filepath from a given URL using data in a Requester Struct
 func DownloadFile(filepath string, url string, r Requester) error {
-
+	tmp := strings.Split(filepath, ".")
+	fileExt := tmp[len(tmp)-1]
+	for _, ext := range r.Ignore {
+		if ext == fileExt {
+			return nil
+		}
+	}
 	// Get the data
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
@@ -272,6 +284,14 @@ func main() {
 	course := flag.String("module", "", "Specific module to scrape")
 	flag.Parse()
 
+	dat, err := ioutil.ReadFile(".scrapeignore")
+	if err != nil {
+		log.Fatal(err)
+	}
+	strData := string(dat)
+	ignore := strings.Split(strData, "\n")
+	println("Ignoring the following extensions: " + strData)
+
 	headers := make(map[string]string)
 	if *authorisationTokenPtr != "" {
 		headers["Authorization"] = "Bearer " + *authorisationTokenPtr
@@ -283,15 +303,16 @@ func main() {
 		Context: "/api/v1/courses?per_page=1000",
 		Headers: headers,
 		BaseURL: *baseURLPtr,
+		Ignore:  ignore,
 	}
 	var spec []string
 	if *requirementsFile != "" {
-		dat, err := ioutil.ReadFile(*requirementsFile)
+		dat, err = ioutil.ReadFile(*requirementsFile)
 		if err != nil {
 			log.Fatal(err)
 		}
-		strData := string(dat)
-		println(strData)
+		strData = string(dat)
+		println("Looking for the following modules:" + strData)
 		spec = strings.Split(strData, "\n")
 
 	} else if *course != "" {
