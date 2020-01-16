@@ -21,7 +21,7 @@ type File struct {
 	DisplayName        string      `json:"display_name"`
 	Filename           string      `json:"filename"`
 	UploadStatus       string      `json:"upload_status"`
-	ContentType        string      `json	:"content-type"`
+	ContentType        string      `json:"content-type"`
 	URL                string      `json:"url"`
 	Size               int         `json:"size"`
 	CreatedAt          time.Time   `json:"created_at"`
