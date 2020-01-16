@@ -1,6 +1,6 @@
 # Canvas cURL rewritten in golang
 
-https://github.com/barrett370/go-canvas-cURL/workflows/Build/badge.svg
+![Build Status](https://github.com/barrett370/go-canvas-cURL/workflows/Build/badge.svg)
 
 to use build using:
 
