@@ -236,34 +236,30 @@ func getCourseModules(r Requester, courses []Course) error {
 			// println("extracted folders")
 
 			for _, folder := range folders {
-				if folder.URL != "" {
-					if !strings.Contains(folder.URL, "/pages/") {
-						if !strings.Contains(folder.URL, "/quizzes/") {
-							println("Extracting files from " + folder.Title)
-							req, err = http.NewRequest("GET", folder.URL, nil)
-							println(folder.URL)
-							req.Header.Add("Authorization", r.Headers["Authorization"])
-							if err != nil {
-								return err
-							}
-							resp, err := client.Do(req)
-							if err != nil {
-								return err
-							}
-							defer resp.Body.Close()
-							// files := make([]File, 0)
-							var file File
-							body, err = ioutil.ReadAll(resp.Body)
-							json.Unmarshal(body, &file)
-							// fmt.Printf("%s\n", body)
-							// fmt.Printf("%v\n", f)
-							// for _, file := range files {
-							println("Downloading " + file.DisplayName)
-							filename := strings.ReplaceAll(("out/" + course.Name + "/" + file.Filename), " ", "")
-							DownloadFile(filename, file.URL, r)
-							// }
-						}
+				if (folder.URL != "") && !strings.Contains(folder.URL, "/pages/") && !strings.Contains(folder.URL, "/quizzes/") {
+					println("Extracting files from " + folder.Title)
+					req, err = http.NewRequest("GET", folder.URL, nil)
+					println(folder.URL)
+					req.Header.Add("Authorization", r.Headers["Authorization"])
+					if err != nil {
+						return err
 					}
+					resp, err := client.Do(req)
+					if err != nil {
+						return err
+					}
+					defer resp.Body.Close()
+					// files := make([]File, 0)
+					var file File
+					body, err = ioutil.ReadAll(resp.Body)
+					json.Unmarshal(body, &file)
+					// fmt.Printf("%s\n", body)
+					// fmt.Printf("%v\n", f)
+					// for _, file := range files {
+					println("Downloading " + file.DisplayName)
+					filename := strings.ReplaceAll(("out/" + course.Name + "/" + file.Filename), " ", "")
+					DownloadFile(filename, file.URL, r)
+					// }
 				}
 			}
 		}
