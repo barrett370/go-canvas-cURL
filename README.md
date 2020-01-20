@@ -30,4 +30,4 @@ To scrape a single specific module run:
 ./Scrape -module=<module-name>
 ```
 
-You can also restrict the file extensions that you are interested in by typing the extensions you wish to ignore in a `.scrapeignore` file in the `./main` directory
+You can also restrict the file extensions that you are interested in by typing the extensions you wish to ignore in a `.scrapeignore` file in the toplevel directory
