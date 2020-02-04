@@ -161,7 +161,7 @@ func DownloadFile(filepath string, url string, r Requester) error {
 	tmp := strings.Split(filepath, ".")
 	fileExt := tmp[len(tmp)-1]
 	for _, ext := range r.Ignore {
-		fmt.Printf("Checking file with extension, %s, against ignored extension, %s\n",fileExt,ext)
+		fmt.Printf("Checking file with extension, %s, against ignored extension, %s\n", fileExt, ext)
 		if ext == fileExt {
 			return nil
 		}
@@ -352,7 +352,7 @@ func main() {
 	}
 	strData := string(dat)
 	ignore := strings.Split(strData, "\n")
-	ignore = ignore[:len(ignore)-1]// remove last empty value
+	ignore = ignore[:len(ignore)-1] // remove last empty value
 	println("Ignoring the following extensions:\n " + strData)
 
 	headers := make(map[string]string)
