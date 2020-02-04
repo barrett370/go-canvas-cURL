@@ -161,6 +161,7 @@ func DownloadFile(filepath string, url string, r Requester) error {
 	tmp := strings.Split(filepath, ".")
 	fileExt := tmp[len(tmp)-1]
 	for _, ext := range r.Ignore {
+		fmt.Printf("Checking file with extension, %s, against ignored extension, %s\n",fileExt,ext)
 		if ext == fileExt {
 			return nil
 		}
@@ -289,7 +290,6 @@ func getCourseModules(r Requester, course Course, client *http.Client) error {
 
 			for _, folder := range folders {
 				if (folder.URL != "") && !strings.Contains(folder.URL, "/pages/") && !strings.Contains(folder.URL, "/quizzes/") {
-					println("Extracting files from " + folder.Title)
 					req, err = http.NewRequest("GET", folder.URL, nil)
 					req.Header.Add("Authorization", r.Headers["Authorization"])
 					if err != nil {
@@ -352,7 +352,8 @@ func main() {
 	}
 	strData := string(dat)
 	ignore := strings.Split(strData, "\n")
-	println("Ignoring the following extensions: " + strData)
+	ignore = ignore[:len(ignore)-1]// remove last empty value
+	println("Ignoring the following extensions:\n " + strData)
 
 	headers := make(map[string]string)
 	if *authorisationTokenPtr != "" {
