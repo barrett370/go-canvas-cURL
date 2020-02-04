@@ -31,3 +31,5 @@ To scrape a single specific module run:
 ```
 
 You can also restrict the file extensions that you are interested in by typing the extensions you wish to ignore in a `.scrapeignore` file in the toplevel directory
+
+To force the re-download of existing files use the `-f=true` flag

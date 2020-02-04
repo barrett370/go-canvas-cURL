@@ -239,7 +239,6 @@ func getCourseModules(r Requester, courses []Course) error {
 				if (folder.URL != "") && !strings.Contains(folder.URL, "/pages/") && !strings.Contains(folder.URL, "/quizzes/") {
 					println("Extracting files from " + folder.Title)
 					req, err = http.NewRequest("GET", folder.URL, nil)
-					println(folder.URL)
 					req.Header.Add("Authorization", r.Headers["Authorization"])
 					if err != nil {
 						return err
@@ -256,9 +255,17 @@ func getCourseModules(r Requester, courses []Course) error {
 					// fmt.Printf("%s\n", body)
 					// fmt.Printf("%v\n", f)
 					// for _, file := range files {
-					println("Downloading " + file.DisplayName)
 					filename := strings.ReplaceAll(("out/" + course.Name + "/" + file.Filename), " ", "")
-					DownloadFile(filename, file.URL, r)
+					if forceDownloadAll {
+
+						println("Downloading " + file.DisplayName)
+						DownloadFile(filename, file.URL, r)
+					} else {
+						if _, err := os.Stat(filename); os.IsNotExist(err) {
+							println("Downloading " + file.DisplayName)
+							DownloadFile(filename, file.URL, r)
+						}
+					}
 					// }
 				}
 			}
@@ -270,6 +277,7 @@ func getCourseModules(r Requester, courses []Course) error {
 
 var (
 	authToken string
+	forceDownloadAll bool 
 )
 
 func main() {
@@ -278,8 +286,14 @@ func main() {
 	authorisationTokenPtr := flag.String("auth", "", "Authorisation key from canvas")
 	requirementsFile := flag.String("requirementsFile", "", "txt file containing list of desired modules")
 	course := flag.String("module", "", "Specific module to scrape")
+	f := flag.Bool("f", false, "Force re-downloading files")
 	flag.Parse()
-
+	forceDownloadAll = *f
+	if forceDownloadAll {
+		println("Forcing re-download of all files")
+	}else{
+		println("downloading new files")
+	}
 	dat, err := ioutil.ReadFile(".scrapeignore")
 	if err != nil {
 		log.Fatal(err)
