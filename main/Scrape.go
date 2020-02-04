@@ -124,7 +124,6 @@ func getCourses(r Requester, spec []string) ([]Course, error) {
 	if len(r.Headers) == 0 {
 		return nil, errors.New("Empty headers")
 	}
-	println("Creating client")
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context, nil)
 	req.Header.Add("Authorization", r.Headers["Authorization"])
@@ -137,18 +136,16 @@ func getCourses(r Requester, spec []string) ([]Course, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	println("creating Courses array")
 	courses := make([]Course, 0)
 	println("Reading Courses")
 	body, err := ioutil.ReadAll(resp.Body)
-	println("Unmarshalling Courses")
 	json.Unmarshal(body, &courses)
 	ret := make([]Course, 0)
 	if len(spec) > 0 {
 		println("filtering discovered courses")
 		for _, course := range courses {
 			for _, specifiedCourse := range spec {
-				if course.Name == specifiedCourse {
+				if strings.ReplaceAll(course.Name, " ", "") == specifiedCourse {
 					ret = append(ret, course)
 				}
 			}
@@ -193,28 +190,83 @@ func DownloadFile(filepath string, url string, r Requester) error {
 	return nil
 }
 
-func getCourseModules(r Requester, courses []Course) error {
+type NoModulesError struct {
+	Course string
+}
 
-	client := &http.Client{}
+func (e *NoModulesError) Error() string {
+	return fmt.Sprintf("%s, does not use the modules page\n", e.Course)
 
-	for _, course := range courses {
-		os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
-		req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/modules/", nil)
-		if err != nil {
-			return err
+}
+
+type NoFilesError struct {
+	Course string
+}
+
+func (e *NoFilesError) Error() string {
+	return fmt.Sprintf("%s, does not seem to have any files publicly available\n", e.Course)
+}
+
+func getCourseFiles(r Requester, course Course, client *http.Client) error {
+
+	os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
+	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/files/", nil)
+	files := make([]File, 0)
+
+	req.Header.Add("Authorization", r.Headers["Authorization"])
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	json.Unmarshal(body, &files)
+
+	if len(files) == 0 {
+		return &NoFilesError{course.Name}
+	}
+
+	for _, file := range files {
+		filename := strings.ReplaceAll(("out/" + course.Name + "/" + file.Filename), " ", "")
+
+		if forceDownloadAll {
+			println("Downloading " + file.DisplayName)
+			DownloadFile(filename, file.URL, r)
+		} else {
+			if _, err := os.Stat(filename); os.IsNotExist(err) {
+				println("Downloading " + file.DisplayName)
+				DownloadFile(filename, file.URL, r)
+			}
 		}
-		// println("https://" + r.BaseURL + r.Context + strconv.Itoa(course.ID) + "/modules/")
+	}
 
-		req.Header.Add("Authorization", r.Headers["Authorization"])
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		modules := make([]Module, 0)
-		body, err := ioutil.ReadAll(resp.Body)
-		// fmt.Printf("%s", body)
-		json.Unmarshal(body, &modules)
+	return nil
+}
+
+func getCourseModules(r Requester, course Course, client *http.Client) error {
+
+	os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
+	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/modules/", nil)
+	if err != nil {
+		return err
+	}
+	// println("https://" + r.BaseURL + r.Context + strconv.Itoa(course.ID) + "/modules/")
+
+	req.Header.Add("Authorization", r.Headers["Authorization"])
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	modules := make([]Module, 0)
+	body, err := ioutil.ReadAll(resp.Body)
+	// fmt.Printf("%s", body)
+	json.Unmarshal(body, &modules)
+	if len(modules) == 0 {
+		fmt.Printf("Course, %s, does not use modules page", strings.ReplaceAll(course.Name, " ", ""))
+		return &NoModulesError{course.Name}
+
+	} else {
 
 		// fmt.Printf("%v", modules)
 		for _, module := range modules {
@@ -276,8 +328,8 @@ func getCourseModules(r Requester, courses []Course) error {
 }
 
 var (
-	authToken string
-	forceDownloadAll bool 
+	authToken        string
+	forceDownloadAll bool
 )
 
 func main() {
@@ -291,7 +343,7 @@ func main() {
 	forceDownloadAll = *f
 	if forceDownloadAll {
 		println("Forcing re-download of all files")
-	}else{
+	} else {
 		println("downloading new files")
 	}
 	dat, err := ioutil.ReadFile(".scrapeignore")
@@ -336,10 +388,24 @@ func main() {
 		fmt.Printf("%d\n", len(courses))
 	}
 	requester.Context = "/api/v1/courses/"
+	client := &http.Client{}
+	for _, course := range courses {
 
-	err = getCourseModules(requester, courses)
+		err = getCourseModules(requester, course, client)
+		if err != nil {
+			switch e := err.(type) {
+			case *NoModulesError:
+				err = getCourseFiles(requester, course, client)
+				if err != nil {
+					fmt.Printf(err.Error())
+				}
+			default:
+				fmt.Printf(e.Error())
+			}
+			// Call Get files method
+		}
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
