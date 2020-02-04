@@ -333,10 +333,10 @@ var (
 
 func main() {
 
-	baseURLPtr := flag.String("baseUrl", "canvas.bham.ac.uk", "baseUrl for canvas curl, default canvas.bham.ac.uk")
-	authorisationTokenPtr := flag.String("auth", "", "Authorisation key from canvas")
-	requirementsFile := flag.String("requirementsFile", "", "txt file containing list of desired modules")
-	course := flag.String("module", "", "Specific module to scrape")
+	baseURLPtr := flag.String("-baseUrl", "canvas.bham.ac.uk", "baseUrl for canvas curl, default canvas.bham.ac.uk")
+	authorisationTokenPtr := flag.String("-auth", "", "Authorisation key from canvas")
+	requirementsFile := flag.String("-requirementsFile", "", "txt file containing list of desired modules")
+	course := flag.String("-module", "", "Specific module to scrape")
 	f := flag.Bool("f", false, "Force re-downloading files")
 	flag.Parse()
 	forceDownloadAll = *f
