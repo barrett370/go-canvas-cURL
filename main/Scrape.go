@@ -182,8 +182,12 @@ func getCourses(r Requester, spec []string) ([]Course, error) {
 	return ret, nil
 }
 
-// DownloadFile downloads files to a given filepath from a given URL using data in a Requester Struct
-func DownloadFile(filename string, filepath string, url string, r Requester) error {
+// Download downloads files to a given filepath from a given URL using data in a Requester Struct
+func (file *File) Download(course Course, r Requester) error {
+	if file.URL == "" {
+		return errors.New("no file URL")
+	}
+	filepath := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
 	tmp := strings.Split(filepath, ".")
 	fileExt := tmp[len(tmp)-1]
 	for _, ext := range r.Ignore {
@@ -192,12 +196,12 @@ func DownloadFile(filename string, filepath string, url string, r Requester) err
 		}
 	}
 	// Get the data
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", file.URL, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Add("Authorization", r.Headers["Authorization"])
-	println("Downloading " + filename)
+	println("Downloading " + file.DisplayName)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
@@ -227,7 +231,7 @@ func DownloadFile(filename string, filepath string, url string, r Requester) err
 	return nil
 }
 
-func getCourseFiles(r Requester, course Course) error {
+func (course *Course) getFiles(r Requester) error {
 
 	_ = os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/files/", nil)
@@ -259,19 +263,10 @@ func getCourseFiles(r Requester, course Course) error {
 	}
 
 	for _, file := range files {
-		filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
-
-		if forceDownloadAll {
-			err = DownloadFile(file.DisplayName, filename, file.URL, r)
+		if forceDownloadAll || os.IsNotExist(err) {
+			err = file.Download(*course, r)
 			if err != nil {
 				return err
-			}
-		} else {
-			if _, err := os.Stat(filename); os.IsNotExist(err) {
-				err = DownloadFile(file.DisplayName, filename, file.URL, r)
-				if err != nil {
-					return err
-				}
 			}
 		}
 	}
@@ -279,7 +274,7 @@ func getCourseFiles(r Requester, course Course) error {
 	return nil
 }
 
-func getCourseModules(r Requester, course Course) ([]Module, error) {
+func (course *Course) getModules(r Requester) ([]Module, error) {
 
 	_ = os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/modules/", nil)
@@ -300,7 +295,7 @@ func getCourseModules(r Requester, course Course) ([]Module, error) {
 		return nil, err
 	}
 	if len(modules) == 0 {
-		fmt.Printf("Course, %s, does not use modules page", strings.ReplaceAll(course.Name, " ", ""))
+		fmt.Printf("c, %s, does not use modules page", strings.ReplaceAll(course.Name, " ", ""))
 		return nil, &NoModulesError{course.Name}
 
 	} else {
@@ -308,7 +303,7 @@ func getCourseModules(r Requester, course Course) ([]Module, error) {
 	}
 
 }
-func getModuleFolders(r Requester, module Module) ([]Folder, error) {
+func (module *Module) getFolders(r Requester) ([]Folder, error) {
 
 	req, _ := http.NewRequest("GET", module.ItemsURL, nil)
 	req.Header.Add("Authorization", r.Headers["Authorization"])
@@ -335,7 +330,7 @@ func getModuleFolders(r Requester, module Module) ([]Folder, error) {
 
 }
 
-func getFolderFiles(r Requester, folder Folder, course Course) error {
+func (folder *Folder) getFiles(r Requester, course Course) error {
 
 	if (folder.URL != "") && !strings.Contains(folder.URL, "/pages/") && !strings.Contains(folder.URL, "/quizzes/") {
 		req, _ := http.NewRequest("GET", folder.URL, nil)
@@ -359,17 +354,11 @@ func getFolderFiles(r Requester, folder Folder, course Course) error {
 			return err
 		}
 		filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
-		if forceDownloadAll {
-			err = DownloadFile(file.DisplayName, filename, file.URL, r)
+		_, err = os.Stat(filename)
+		if forceDownloadAll || os.IsNotExist(err) {
+			err = file.Download(course, r)
 			if err != nil {
 				return err
-			}
-		} else {
-			if _, err := os.Stat(filename); os.IsNotExist(err) {
-				err = DownloadFile(file.DisplayName, filename, file.URL, r)
-				if err != nil {
-					return err
-				}
 			}
 		}
 	}
@@ -440,11 +429,11 @@ func main() {
 	requester.Context = "/api/v1/courses/"
 	for _, course := range courses {
 
-		modules, err := getCourseModules(requester, course)
+		modules, err := course.getModules(requester)
 		if err != nil {
 			switch e := err.(type) {
 			case *NoModulesError:
-				err = getCourseFiles(requester, course)
+				err = course.getFiles(requester)
 				if err != nil {
 					fmt.Printf(err.Error() + "\n")
 					continue
@@ -457,12 +446,12 @@ func main() {
 			}
 		}
 		for _, module := range modules {
-			folders, err := getModuleFolders(requester, module)
+			folders, err := module.getFolders(requester)
 			if err != nil {
 				fmt.Printf(err.Error() + "\n")
 			}
 			for _, folder := range folders {
-				err = getFolderFiles(requester, folder, course)
+				err = folder.getFiles(requester, course)
 				if err != nil {
 					fmt.Printf(err.Error() + "\n")
 				}
