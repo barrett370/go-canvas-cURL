@@ -122,14 +122,16 @@ type Module struct {
 
 func getCourses(r Requester, spec []string) ([]Course, error) {
 	if len(r.Headers) == 0 {
-		return nil, errors.New("Empty headers")
+		return nil, errors.New("empty headers")
 	}
-	client := &http.Client{}
 	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context, nil)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Add("Authorization", r.Headers["Authorization"])
 	println("https://" + r.BaseURL + r.Context)
 	println("Executing request")
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	println("Executed.")
 	if err != nil {
 		println("Error in request")
@@ -139,7 +141,15 @@ func getCourses(r Requester, spec []string) ([]Course, error) {
 	courses := make([]Course, 0)
 	println("Reading Courses")
 	body, err := ioutil.ReadAll(resp.Body)
-	json.Unmarshal(body, &courses)
+	err = json.Unmarshal(body, &courses)
+
+	if err != nil {
+		return nil, err
+	}
+	err = resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
 	ret := make([]Course, 0)
 	if len(spec) > 0 {
 		println("filtering discovered courses")
@@ -157,7 +167,7 @@ func getCourses(r Requester, spec []string) ([]Course, error) {
 }
 
 // DownloadFile downloads files to a given filepath from a given URL using data in a Requester Struct
-func DownloadFile(filepath string, url string, r Requester) error {
+func DownloadFile(filename string, filepath string, url string, r Requester) error {
 	tmp := strings.Split(filepath, ".")
 	fileExt := tmp[len(tmp)-1]
 	for _, ext := range r.Ignore {
@@ -166,10 +176,13 @@ func DownloadFile(filepath string, url string, r Requester) error {
 		}
 	}
 	// Get the data
-	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
+	}
 	req.Header.Add("Authorization", r.Headers["Authorization"])
-	resp, err := client.Do(req)
+	println("Downloading " + filename)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -187,6 +200,14 @@ func DownloadFile(filepath string, url string, r Requester) error {
 	// // Write the body to file
 
 	_, err = io.Copy(out, resp.Body)
+	err = resp.Body.Close()
+	if err != nil {
+		return err
+	}
+	err = out.Close()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -207,35 +228,51 @@ func (e *NoFilesError) Error() string {
 	return fmt.Sprintf("%s, does not seem to have any files publicly available\n", e.Course)
 }
 
-func getCourseFiles(r Requester, course Course, client *http.Client) error {
+func getCourseFiles(r Requester, course Course) error {
 
-	os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
+	_ = os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/files/", nil)
+	if err != nil {
+		return err
+	}
 	files := make([]File, 0)
 
 	req.Header.Add("Authorization", r.Headers["Authorization"])
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	json.Unmarshal(body, &files)
-
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(body, &files)
+	if err != nil {
+		return err
+	}
+	err = resp.Body.Close()
+	if err != nil {
+		return err
+	}
 	if len(files) == 0 {
 		return &NoFilesError{course.Name}
 	}
 
 	for _, file := range files {
-		filename := strings.ReplaceAll(("out/" + course.Name + "/" + file.Filename), " ", "")
+		filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
 
 		if forceDownloadAll {
-			println("Downloading " + file.DisplayName)
-			DownloadFile(filename, file.URL, r)
+			err = DownloadFile(file.DisplayName, filename, file.URL, r)
+			if err != nil {
+				return err
+			}
 		} else {
 			if _, err := os.Stat(filename); os.IsNotExist(err) {
-				println("Downloading " + file.DisplayName)
-				DownloadFile(filename, file.URL, r)
+				err = DownloadFile(file.DisplayName, filename, file.URL, r)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -243,32 +280,32 @@ func getCourseFiles(r Requester, course Course, client *http.Client) error {
 	return nil
 }
 
-func getCourseModules(r Requester, course Course, client *http.Client) error {
+func getCourseModules(r Requester, course Course) error {
 
-	os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
+	_ = os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/modules/", nil)
 	if err != nil {
 		return err
 	}
-	// println("https://" + r.BaseURL + r.Context + strconv.Itoa(course.ID) + "/modules/")
 
 	req.Header.Add("Authorization", r.Headers["Authorization"])
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 	modules := make([]Module, 0)
 	body, err := ioutil.ReadAll(resp.Body)
-	// fmt.Printf("%s", body)
-	json.Unmarshal(body, &modules)
+	err = json.Unmarshal(body, &modules)
+	if err != nil {
+		return err
+	}
 	if len(modules) == 0 {
 		fmt.Printf("Course, %s, does not use modules page", strings.ReplaceAll(course.Name, " ", ""))
 		return &NoModulesError{course.Name}
 
 	} else {
 
-		// fmt.Printf("%v", modules)
 		for _, module := range modules {
 
 			req, err = http.NewRequest("GET", module.ItemsURL, nil)
@@ -276,25 +313,33 @@ func getCourseModules(r Requester, course Course, client *http.Client) error {
 			if err != nil {
 				return err
 			}
-			resp, err := client.Do(req)
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				return err
 			}
 			defer resp.Body.Close()
 			folders := make([]Folder, 0)
 			body, err = ioutil.ReadAll(resp.Body)
-			json.Unmarshal(body, &folders)
-			// fmt.Printf("%v", folders)
-			// println("extracted folders")
+			if err != nil {
+				return err
+			}
+			err = json.Unmarshal(body, &folders)
+			if err != nil {
+				return err
+			}
+			err = resp.Body.Close()
+			if err != nil {
+				return err
+			}
 
 			for _, folder := range folders {
 				if (folder.URL != "") && !strings.Contains(folder.URL, "/pages/") && !strings.Contains(folder.URL, "/quizzes/") {
-					req, err = http.NewRequest("GET", folder.URL, nil)
+					req, _ = http.NewRequest("GET", folder.URL, nil)
 					req.Header.Add("Authorization", r.Headers["Authorization"])
 					if err != nil {
 						return err
 					}
-					resp, err := client.Do(req)
+					resp, err := http.DefaultClient.Do(req)
 					if err != nil {
 						return err
 					}
@@ -302,22 +347,31 @@ func getCourseModules(r Requester, course Course, client *http.Client) error {
 					// files := make([]File, 0)
 					var file File
 					body, err = ioutil.ReadAll(resp.Body)
-					json.Unmarshal(body, &file)
-					// fmt.Printf("%s\n", body)
-					// fmt.Printf("%v\n", f)
-					// for _, file := range files {
-					filename := strings.ReplaceAll(("out/" + course.Name + "/" + file.Filename), " ", "")
+					if err != nil {
+						return err
+					}
+					err = json.Unmarshal(body, &file)
+					if err != nil {
+						return err
+					}
+					err = resp.Body.Close()
+					if err != nil {
+						return err
+					}
+					filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
 					if forceDownloadAll {
-
-						println("Downloading " + file.DisplayName)
-						DownloadFile(filename, file.URL, r)
+						err = DownloadFile(file.DisplayName, filename, file.URL, r)
+						if err != nil {
+							return err
+						}
 					} else {
 						if _, err := os.Stat(filename); os.IsNotExist(err) {
-							println("Downloading " + file.DisplayName)
-							DownloadFile(filename, file.URL, r)
+							err = DownloadFile(file.DisplayName, filename, file.URL, r)
+							if err != nil {
+								return err
+							}
 						}
 					}
-					// }
 				}
 			}
 		}
@@ -333,10 +387,10 @@ var (
 
 func main() {
 
-	baseURLPtr := flag.String("-baseUrl", "canvas.bham.ac.uk", "baseUrl for canvas curl, default canvas.bham.ac.uk")
-	authorisationTokenPtr := flag.String("-auth", "", "Authorisation key from canvas")
-	requirementsFile := flag.String("-requirementsFile", "", "txt file containing list of desired modules")
-	course := flag.String("-module", "", "Specific module to scrape")
+	baseURLPtr := flag.String("baseUrl", "canvas.bham.ac.uk", "baseUrl for canvas curl, default canvas.bham.ac.uk")
+	authorisationTokenPtr := flag.String("auth", "", "Authorisation key from canvas")
+	requirementsFile := flag.String("requirementsFile", "", "txt file containing list of desired modules")
+	course := flag.String("module", "", "Specific module to scrape")
 	f := flag.Bool("f", false, "Force re-downloading files")
 	flag.Parse()
 	forceDownloadAll = *f
@@ -388,24 +442,23 @@ func main() {
 		fmt.Printf("%d\n", len(courses))
 	}
 	requester.Context = "/api/v1/courses/"
-	client := &http.Client{}
 	for _, course := range courses {
 
-		err = getCourseModules(requester, course, client)
+		err = getCourseModules(requester, course)
 		if err != nil {
 			switch e := err.(type) {
 			case *NoModulesError:
-				err = getCourseFiles(requester, course, client)
+				err = getCourseFiles(requester, course)
 				if err != nil {
-					fmt.Printf(err.Error())
+					fmt.Printf(err.Error() + "\n")
+					continue
 				}
+			case *NoFilesError:
+				continue
 			default:
-				fmt.Printf(e.Error())
+				fmt.Printf(e.Error() + "\n")
+				continue
 			}
-			// Call Get files method
 		}
-	}
-	if err != nil {
-		log.Fatal(err)
 	}
 }
