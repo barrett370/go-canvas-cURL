@@ -63,6 +63,14 @@ type Requester struct {
 	Ignore  []string
 }
 
+// Status returned instead of structured response
+type Status struct {
+	Status string `json:"status"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
 // Course is the toplevel struct containing all data related to an individual Course
 type Course struct {
 	ID                          int         `json:"id"`
@@ -133,7 +141,7 @@ type NoFilesError struct {
 }
 
 func (e *NoFilesError) Error() string {
-	return fmt.Sprintf("%s, does not seem to have any files publicly available\n", e.Course)
+	return fmt.Sprintf("course, %s, does not seem to have any files publicly available\n", strings.ReplaceAll(e.Course, " ", ""))
 }
 
 func getCourses(r Requester, spec []string) ([]Course, error) {
@@ -160,6 +168,7 @@ func getCourses(r Requester, spec []string) ([]Course, error) {
 	err = json.Unmarshal(body, &courses)
 
 	if err != nil {
+		fmt.Printf("%s, \n", body)
 		return nil, err
 	}
 	err = resp.Body.Close()
@@ -232,7 +241,8 @@ func (file *File) Download(course Course, r Requester) error {
 }
 
 func (course *Course) getFiles(r Requester) error {
-
+	fmt.Printf("Looking for files in course, %s \n", course.Name)
+	var unmarshalTypeError *json.UnmarshalTypeError
 	_ = os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/files/", nil)
 	if err != nil {
@@ -252,6 +262,20 @@ func (course *Course) getFiles(r Requester) error {
 	}
 	err = json.Unmarshal(body, &files)
 	if err != nil {
+		println("Error unmarshalling response to file")
+		switch {
+		case errors.As(err, &unmarshalTypeError):
+			status := Status{}
+			e2 := json.Unmarshal(body, &status)
+			if e2 != nil {
+				println("Cannot unmarshal response")
+				return e2
+			} else {
+				if status.Status == "unauthorised" {
+					return &NoFilesError{course.Name}
+				}
+			}
+		}
 		return err
 	}
 	err = resp.Body.Close()
@@ -263,6 +287,8 @@ func (course *Course) getFiles(r Requester) error {
 	}
 
 	for _, file := range files {
+		filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
+		_, err = os.Stat(filename)
 		if forceDownloadAll || os.IsNotExist(err) {
 			err = file.Download(*course, r)
 			if err != nil {
@@ -295,7 +321,7 @@ func (course *Course) getModules(r Requester) ([]Module, error) {
 		return nil, err
 	}
 	if len(modules) == 0 {
-		fmt.Printf("c, %s, does not use modules page", strings.ReplaceAll(course.Name, " ", ""))
+		fmt.Printf("course, %s, does not use modules page \n ", strings.ReplaceAll(course.Name, " ", ""))
 		return nil, &NoModulesError{course.Name}
 
 	} else {
@@ -347,6 +373,7 @@ func (folder *Folder) getFiles(r Requester, course Course) error {
 		}
 		err = json.Unmarshal(body, &file)
 		if err != nil {
+			fmt.Printf("%s cannot be unmarshalled from folder", body)
 			return err
 		}
 		err = resp.Body.Close()
@@ -372,6 +399,7 @@ var (
 
 func main() {
 
+	_ = os.Mkdir("out", 0777)
 	baseURLPtr := flag.String("baseUrl", "canvas.bham.ac.uk", "baseUrl for canvas curl, default canvas.bham.ac.uk")
 	authorisationTokenPtr := flag.String("auth", "", "Authorisation key from canvas")
 	requirementsFile := flag.String("requirementsFile", "", "txt file containing list of desired modules")
