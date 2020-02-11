@@ -243,7 +243,11 @@ func (file *File) Download(course Course, r Requester) error {
 func (course *Course) getFiles(r Requester) error {
 	fmt.Printf("Looking for files in course, %s \n", course.Name)
 	var unmarshalTypeError *json.UnmarshalTypeError
-	_ = os.MkdirAll("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
+	if outputDir == ""{
+		_ = os.MkdirAll("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
+	} else {
+		_ = os.MkdirAll(outputDir+"/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
+	}
 	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/files/", nil)
 	if err != nil {
 		return err
@@ -262,7 +266,6 @@ func (course *Course) getFiles(r Requester) error {
 	}
 	err = json.Unmarshal(body, &files)
 	if err != nil {
-		println("Error unmarshalling response to file")
 		switch {
 		case errors.As(err, &unmarshalTypeError):
 			status := Status{}
@@ -287,7 +290,12 @@ func (course *Course) getFiles(r Requester) error {
 	}
 
 	for _, file := range files {
-		filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
+		var filename string 
+		if outputDir == ""{
+			filename = strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
+		} else {
+			filename = strings.ReplaceAll(outputDir+"/"+course.Name+"/"+file.Filename, " ", "")
+		}
 		_, err = os.Stat(filename)
 		if forceDownloadAll || os.IsNotExist(err) {
 			err = file.Download(*course, r)
@@ -301,8 +309,11 @@ func (course *Course) getFiles(r Requester) error {
 }
 
 func (course *Course) getModules(r Requester) ([]Module, error) {
-
-	_ = os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
+	if outputDir == ""{
+		_ = os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
+	} else {
+		_ = os.Mkdir(outputDir+"/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
+	}
 	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/modules/", nil)
 	if err != nil {
 		return nil, err
@@ -395,17 +406,25 @@ func (folder *Folder) getFiles(r Requester, course Course) error {
 var (
 	authToken        string
 	forceDownloadAll bool
+	outputDir        string
 )
 
 func main() {
 
-	_ = os.Mkdir("out", 0777)
 	baseURLPtr := flag.String("baseUrl", "canvas.bham.ac.uk", "baseUrl for canvas curl, default canvas.bham.ac.uk")
 	authorisationTokenPtr := flag.String("auth", "", "Authorisation key from canvas")
 	requirementsFile := flag.String("requirementsFile", "", "txt file containing list of desired modules")
 	course := flag.String("module", "", "Specific module to scrape")
 	f := flag.Bool("f", false, "Force re-downloading files")
+	output := flag.String("o", "", "Where to direct output")
 	flag.Parse()
+	outputDir = *output
+	if outputDir == ""{
+
+		_ = os.Mkdir("out", 0777)
+	} else {
+		_ = os.Mkdir(outputDir, 0777)
+	}
 	forceDownloadAll = *f
 	if forceDownloadAll {
 		println("Forcing re-download of all files")
@@ -456,6 +475,7 @@ func main() {
 	}
 	requester.Context = "/api/v1/courses/"
 	for _, course := range courses {
+		fmt.Println("Searching course: ", course.Name)
 
 		modules, err := course.getModules(requester)
 		if err != nil {
