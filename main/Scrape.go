@@ -243,7 +243,7 @@ func (file *File) Download(course Course, r Requester) error {
 func (course *Course) getFiles(r Requester) error {
 	fmt.Printf("Looking for files in course, %s \n", course.Name)
 	var unmarshalTypeError *json.UnmarshalTypeError
-	_ = os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
+	_ = os.MkdirAll("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/files/", nil)
 	if err != nil {
 		return err
@@ -463,7 +463,7 @@ func main() {
 			case *NoModulesError:
 				err = course.getFiles(requester)
 				if err != nil {
-					fmt.Printf(err.Error() + "\n")
+					fmt.Printf(e.Error() + "\n")
 					continue
 				}
 			case *NoFilesError:
