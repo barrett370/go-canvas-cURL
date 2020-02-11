@@ -314,7 +314,7 @@ func (course *Course) getModules(r Requester) ([]Module, error) {
 	} else {
 		_ = os.Mkdir(outputDir+"/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 	}
-	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/modules/", nil)
+	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/modules/?per_page=1000", nil)
 	if err != nil {
 		return nil, err
 	}
