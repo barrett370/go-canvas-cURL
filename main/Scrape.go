@@ -248,7 +248,7 @@ func (course *Course) getFiles(r Requester) error {
 	} else {
 		_ = os.MkdirAll(outputDir+"/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 	}
-	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/files/", nil)
+	req, err := http.NewRequest("GET", "https://"+r.BaseURL+r.Context+strconv.Itoa(course.ID)+"/files/?per_page=1000", nil)
 	if err != nil {
 		return err
 	}
