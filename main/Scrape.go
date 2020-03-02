@@ -192,28 +192,30 @@ func getCourses(r Requester, spec []string) ([]Course, error) {
 }
 
 // Download downloads files to a given filepath from a given URL using data in a Requester Struct
-func (file *File) Download(course Course, r Requester) error {
+func (file *File) Download(course Course, r Requester) {
 	if file.URL == "" {
-		return errors.New("no file URL")
+		log.Println(errors.New("no file URL"))
+		return
 	}
 	filepath := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
 	tmp := strings.Split(filepath, ".")
 	fileExt := tmp[len(tmp)-1]
 	for _, ext := range r.Ignore {
 		if ext == fileExt {
-			return nil
+			return
 		}
 	}
 	// Get the data
 	req, err := http.NewRequest("GET", file.URL, nil)
 	if err != nil {
-		return err
+		log.Println(err)
+		return
 	}
 	req.Header.Add("Authorization", r.Headers["Authorization"])
-	println("Downloading " + file.DisplayName)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		log.Println(err)
+		return
 	}
 
 	defer resp.Body.Close()
@@ -222,7 +224,8 @@ func (file *File) Download(course Course, r Requester) error {
 	out, err := os.Create(filepath)
 
 	if err != nil {
-		return err
+		log.Println(err)
+		return
 	}
 	defer out.Close()
 
@@ -231,19 +234,21 @@ func (file *File) Download(course Course, r Requester) error {
 	_, err = io.Copy(out, resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
-		return err
+		return
+		log.Println(err)
 	}
 	err = out.Close()
 	if err != nil {
-		return err
+		return
+		log.Println(err)
 	}
-	return nil
+	return
 }
 
 func (course *Course) getFiles(r Requester) error {
 	fmt.Printf("Looking for files in course, %s \n", course.Name)
 	var unmarshalTypeError *json.UnmarshalTypeError
-	if outputDir == ""{
+	if outputDir == "" {
 		_ = os.MkdirAll("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 	} else {
 		_ = os.MkdirAll(outputDir+"/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
@@ -290,18 +295,15 @@ func (course *Course) getFiles(r Requester) error {
 	}
 
 	for _, file := range files {
-		var filename string 
-		if outputDir == ""{
+		var filename string
+		if outputDir == "" {
 			filename = strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
 		} else {
 			filename = strings.ReplaceAll(outputDir+"/"+course.Name+"/"+file.Filename, " ", "")
 		}
 		_, err = os.Stat(filename)
 		if forceDownloadAll || os.IsNotExist(err) {
-			err = file.Download(*course, r)
-			if err != nil {
-				return err
-			}
+			file.Download(*course, r)
 		}
 	}
 
@@ -309,7 +311,7 @@ func (course *Course) getFiles(r Requester) error {
 }
 
 func (course *Course) getModules(r Requester) ([]Module, error) {
-	if outputDir == ""{
+	if outputDir == "" {
 		_ = os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 	} else {
 		_ = os.Mkdir(outputDir+"/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
@@ -394,7 +396,7 @@ func (folder *Folder) getFiles(r Requester, course Course) error {
 		filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
 		_, err = os.Stat(filename)
 		if forceDownloadAll || os.IsNotExist(err) {
-			err = file.Download(course, r)
+			go file.Download(course, r)
 			if err != nil {
 				return err
 			}
@@ -419,7 +421,7 @@ func main() {
 	output := flag.String("o", "", "Where to direct output")
 	flag.Parse()
 	outputDir = *output
-	if outputDir == ""{
+	if outputDir == "" {
 
 		_ = os.Mkdir("out", 0777)
 	} else {
