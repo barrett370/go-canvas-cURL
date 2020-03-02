@@ -16,7 +16,7 @@ to use build using:
 make build
 ```
 
-with your Canvas API token exported on your path as CANVAS_TOKEN
+with your Canvas API token defined as CANVAS_TOKEN in a file `.env` at the top level of the project
 
 To scrape a specific list of modules simply enter the course names into a file separated by newlines. Then to run:
 
