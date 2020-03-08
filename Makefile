@@ -1,4 +1,6 @@
-.PHONY build:
-build:
-	go build -v -ldflags "-X main.authToken=${CANVAS_TOKEN}" main/Scrape.go
+include .env
+
+.PHONY app:
+app:
+	cd main && go build -v -ldflags "-X main.authToken=${CANVAS_TOKEN}" -o ../bin/scrape
 
