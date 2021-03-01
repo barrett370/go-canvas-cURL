@@ -1,10 +1,10 @@
-package main
+package lib
 
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
+	"github.com/spf13/viper"
 	"io"
 	"io/ioutil"
 	"log"
@@ -144,7 +144,7 @@ func (e *NoFilesError) Error() string {
 	return fmt.Sprintf("course, %s, does not seem to have any files publicly available\n", strings.ReplaceAll(e.Course, " ", ""))
 }
 
-func getCourses(r Requester, spec []string) ([]Course, error) {
+func GetCourses(r Requester, spec []string) ([]Course, error) {
 	if len(r.Headers) == 0 {
 		return nil, errors.New("empty headers")
 	}
@@ -180,7 +180,7 @@ func getCourses(r Requester, spec []string) ([]Course, error) {
 		println("filtering discovered courses")
 		for _, course := range courses {
 			for _, specifiedCourse := range spec {
-				if strings.ReplaceAll(course.Name, " ", "") == specifiedCourse {
+				if strings.ToLower(strings.ReplaceAll(course.Name, " ", "")) == strings.ToLower(specifiedCourse) {
 					ret = append(ret, course)
 				}
 			}
@@ -245,7 +245,7 @@ func (file *File) Download(course Course, r Requester) {
 	return
 }
 
-func (course *Course) getFiles(r Requester) error {
+func (course *Course) GetFiles(r Requester) error {
 	fmt.Printf("Looking for files in course, %s \n", course.Name)
 	var unmarshalTypeError *json.UnmarshalTypeError
 	if outputDir == "" {
@@ -310,7 +310,7 @@ func (course *Course) getFiles(r Requester) error {
 	return nil
 }
 
-func (course *Course) getModules(r Requester) ([]Module, error) {
+func (course *Course) GetModules(r Requester) ([]Module, error) {
 	if outputDir == "" {
 		_ = os.Mkdir("out/"+strings.ReplaceAll(course.Name, " ", ""), 0777)
 	} else {
@@ -342,7 +342,7 @@ func (course *Course) getModules(r Requester) ([]Module, error) {
 	}
 
 }
-func (module *Module) getFolders(r Requester) ([]Folder, error) {
+func (module *Module) GetFolders(r Requester) ([]Folder, error) {
 
 	req, _ := http.NewRequest("GET", module.ItemsURL, nil)
 	req.Header.Add("Authorization", r.Headers["Authorization"])
@@ -369,7 +369,7 @@ func (module *Module) getFolders(r Requester) ([]Folder, error) {
 
 }
 
-func (folder *Folder) getFiles(r Requester, course Course) error {
+func (folder *Folder) GetFiles(r Requester, course Course) error {
 
 	if (folder.URL != "") && !strings.Contains(folder.URL, "/pages/") && !strings.Contains(folder.URL, "/quizzes/") {
 		req, _ := http.NewRequest("GET", folder.URL, nil)
@@ -406,33 +406,38 @@ func (folder *Folder) getFiles(r Requester, course Course) error {
 }
 
 var (
-	authToken        string
 	forceDownloadAll bool
 	outputDir        string
 )
 
-func main() {
+func ReadConfig() (*viper.Viper, error) {
+	fmt.Println("Reading config file")
 
-	baseURLPtr := flag.String("baseUrl", "canvas.bham.ac.uk", "baseUrl for canvas curl, default canvas.bham.ac.uk")
-	authorisationTokenPtr := flag.String("auth", "", "Authorisation key from canvas")
-	requirementsFile := flag.String("requirementsFile", "", "txt file containing list of desired modules")
-	course := flag.String("module", "", "Specific module to scrape")
-	f := flag.Bool("f", false, "Force re-downloading files")
-	output := flag.String("o", "", "Where to direct output")
-	flag.Parse()
-	outputDir = *output
-	if outputDir == "" {
+	v := viper.New()
+	v.AddConfigPath(".")
+	v.SetConfigName("config")
+	v.SetConfigType("yaml")
+	v.AutomaticEnv()
+	v.SetDefault("AuthToken", "token")
+	err := v.ReadInConfig()
+	return v, err
+}
 
-		_ = os.Mkdir("out", 0777)
-	} else {
-		_ = os.Mkdir(outputDir, 0777)
+func GetRequester() (Requester, error) {
+	fmt.Println("listing modules")
+	baseUrl := "canvas.bham.ac.uk"
+	config, err := ReadConfig()
+	if err != nil {
+		return Requester{}, err
 	}
-	forceDownloadAll = *f
-	if forceDownloadAll {
-		println("Forcing re-download of all files")
-	} else {
-		println("downloading new files")
-	}
+	authToken := config.GetString("AuthToken")
+
+	headers := make(map[string]string)
+	fmt.Println("Using lib.AuthToken, %s", authToken)
+	fmt.Println("", authToken)
+
+	headers["Authorization"] = "Bearer " + authToken
+
 	dat, err := ioutil.ReadFile(".scrapeignore")
 	if err != nil {
 		log.Fatal(err)
@@ -442,70 +447,12 @@ func main() {
 	ignore = ignore[:len(ignore)-1] // remove last empty value
 	println("Ignoring the following extensions:\n " + strData)
 
-	headers := make(map[string]string)
-	if *authorisationTokenPtr != "" {
-		headers["Authorization"] = "Bearer " + *authorisationTokenPtr
-	} else {
-		headers["Authorization"] = "Bearer " + authToken
-	}
-
 	requester := Requester{
 		Context: "/api/v1/courses?per_page=1000",
 		Headers: headers,
-		BaseURL: *baseURLPtr,
+		BaseURL: baseUrl,
 		Ignore:  ignore,
 	}
-	var spec []string
-	if *requirementsFile != "" {
-		dat, err = ioutil.ReadFile(*requirementsFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		strData = string(dat)
-		println("Looking for the following modules:" + strData)
-		spec = strings.Split(strData, "\n")
 
-	} else if *course != "" {
-		spec = append(spec, *course)
-	}
-	courses, err := getCourses(requester, spec)
-	if err != nil {
-		log.Fatal(err)
-	} else {
-		print("Scraped Courses:")
-		fmt.Printf("%d\n", len(courses))
-	}
-	requester.Context = "/api/v1/courses/"
-	for _, course := range courses {
-		fmt.Println("Searching course: ", course.Name)
-
-		modules, err := course.getModules(requester)
-		if err != nil {
-			switch e := err.(type) {
-			case *NoModulesError:
-				err = course.getFiles(requester)
-				if err != nil {
-					fmt.Printf(e.Error() + "\n")
-					continue
-				}
-			case *NoFilesError:
-				continue
-			default:
-				fmt.Printf(e.Error() + "\n")
-				continue
-			}
-		}
-		for _, module := range modules {
-			folders, err := module.getFolders(requester)
-			if err != nil {
-				fmt.Printf(err.Error() + "\n")
-			}
-			for _, folder := range folders {
-				err = folder.getFiles(requester, course)
-				if err != nil {
-					fmt.Printf(err.Error() + "\n")
-				}
-			}
-		}
-	}
+	return requester, nil
 }
