@@ -12,24 +12,18 @@ This is a rewriting of [Canvas cURL](https://github.com/Chasbob/Canvas-cURL) by 
 
 to use build using:
 
-```bash
-make build
-```
-
-with your Canvas API token defined as CANVAS_TOKEN in a file `.env` at the top level of the project
-
-To scrape a specific list of modules simply enter the course names into a file separated by newlines. Then to run:
-
-```bash
-./Scrape -requirementsFile=<path-to-file>
-```
-
-To scrape a single specific module run:
-
 ```bash 
-./Scrape -module=<module-name>
+just 
 ```
+
+with your Canvas API token defined as AuthToken in a yaml file (default is config.yaml in same dir as exe, can point to alternative locations with `--config` flag)
+
+To scrape a specific list of modules simply follow `download` with the names of the modules
+
+```bash
+./scrape download mod1 mod2 ...
+```
+Alternatively, `./scrape download all` will download all found modules
 
 You can also restrict the file extensions which you are interested in by typing the extensions you wish to ignore in a `.scrapeignore` file in the toplevel directory
 
-To force the re-download of existing files use the `-f=true` flag
