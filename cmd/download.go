@@ -70,6 +70,7 @@ var downloadCmd = &cobra.Command{
 			}
 			for _, module := range modules {
 				folders, err := module.GetFolders(requester)
+
 				if err != nil {
 					fmt.Printf(err.Error() + "\n")
 				}

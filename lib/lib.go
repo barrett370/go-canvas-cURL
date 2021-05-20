@@ -10,11 +10,34 @@ import (
 	"log"
 	"net/http"
 	"os"
+    "regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
+type Page struct {
+	Title        string    `json:"title"`
+	CreatedAt    time.Time `json:"created_at"`
+	URL          string    `json:"url"`
+	EditingRoles string    `json:"editing_roles"`
+	PageID       int       `json:"page_id"`
+	LastEditedBy struct {
+		ID             int    `json:"id"`
+		DisplayName    string `json:"display_name"`
+		AvatarImageURL string `json:"avatar_image_url"`
+		HTMLURL        string `json:"html_url"`
+		Pronouns       string `json:"pronouns"`
+	} `json:"last_edited_by"`
+	Published        bool        `json:"published"`
+	HideFromStudents bool        `json:"hide_from_students"`
+	FrontPage        bool        `json:"front_page"`
+	HTMLURL          string      `json:"html_url"`
+	TodoDate         interface{} `json:"todo_date"`
+	UpdatedAt        time.Time   `json:"updated_at"`
+	LockedForUser    bool        `json:"locked_for_user"`
+	Body             string      `json:"body"`
+}
 // File contains information relating to an individual file on canvas
 type File struct {
 	ID                 int         `json:"id"`
@@ -370,8 +393,7 @@ func (module *Module) GetFolders(r Requester) ([]Folder, error) {
 }
 
 func (folder *Folder) GetFiles(r Requester, course Course) error {
-
-	if (folder.URL != "") && !strings.Contains(folder.URL, "/pages/") && !strings.Contains(folder.URL, "/quizzes/") {
+	if (folder.URL != "") && !strings.Contains(folder.URL, "/quizzes/") {
 		req, _ := http.NewRequest("GET", folder.URL, nil)
 		req.Header.Add("Authorization", r.Headers["Authorization"])
 		resp, err := http.DefaultClient.Do(req)
@@ -381,27 +403,80 @@ func (folder *Folder) GetFiles(r Requester, course Course) error {
 		defer resp.Body.Close()
 		var file File
 		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		err = json.Unmarshal(body, &file)
-		if err != nil {
-			fmt.Printf("%s cannot be unmarshalled from folder", body)
-			return err
-		}
-		err = resp.Body.Close()
-		if err != nil {
-			return err
-		}
-		filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
-		_, err = os.Stat(filename)
-		if forceDownloadAll || os.IsNotExist(err) {
-			go file.Download(course, r)
-			if err != nil {
-				return err
-			}
-		}
-	}
+        if strings.Contains(folder.URL, "/pages/"){
+            var page Page
+            err = json.Unmarshal(body, &page)
+            //fmt.Printf("Page: %v\n",page)
+            body_list := strings.Split(page.Body," ")
+            urls := make([]string,1)
+            for _,each := range body_list{
+                if strings.Contains(each,"canvas.bham.ac.uk"){
+                    urls = append(urls, each)
+                }
+            }
+            //fmt.Printf("DETECTED URLS: %v\n", urls)
+            for _, url := range urls{
+                if strings.Contains(url, "files") && strings.Contains(url, "api"){
+                    url_re := regexp.MustCompile(`https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)`)
+                    file_url := url_re.FindString(url)
+
+                    req, err := http.NewRequest("GET", file_url, nil)
+                    if err != nil {
+                        log.Fatal(err)
+                    }
+                    req.Header.Add("Authorization", r.Headers["Authorization"])
+                    resp, err := http.DefaultClient.Do(req)
+                    if err != nil {
+                        return err
+                    }
+		            body, err := ioutil.ReadAll(resp.Body)
+                    if err != nil {
+                        return err
+                    }
+                    json.Unmarshal(body, &file)
+                    err = resp.Body.Close()
+                    if err != nil {
+                        return err
+                    }
+                    fmt.Printf("Downloading file: %v\n", file.DisplayName)
+                    filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
+                    _, err = os.Stat(filename)
+                    if forceDownloadAll || os.IsNotExist(err) {
+                        go file.Download(course, r)
+                        if err != nil {
+                            return err
+                        }
+                    }
+
+
+
+                }
+
+            }
+
+        }else{
+            if err != nil {
+                return err
+            }
+            err = json.Unmarshal(body, &file)
+            if err != nil {
+                fmt.Printf("%s cannot be unmarshalled from folder", body)
+                return err
+            }
+            err = resp.Body.Close()
+            if err != nil {
+                return err
+            }
+            filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
+            _, err = os.Stat(filename)
+            if forceDownloadAll || os.IsNotExist(err) {
+                go file.Download(course, r)
+                if err != nil {
+                    return err
+                }
+            }
+        }
+    }
 	return nil
 }
 
