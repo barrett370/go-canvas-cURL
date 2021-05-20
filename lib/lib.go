@@ -257,13 +257,13 @@ func (file *File) Download(course Course, r Requester) {
 	_, err = io.Copy(out, resp.Body)
 	err = resp.Body.Close()
 	if err != nil {
-		return
 		log.Println(err)
+		return
 	}
 	err = out.Close()
 	if err != nil {
-		return
 		log.Println(err)
+		return
 	}
 	return
 }
@@ -442,7 +442,7 @@ func (folder *Folder) GetFiles(r Requester, course Course) error {
                     filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
                     _, err = os.Stat(filename)
                     if forceDownloadAll || os.IsNotExist(err) {
-                        go file.Download(course, r)
+                        file.Download(course, r)
                         if err != nil {
                             return err
                         }
@@ -470,7 +470,7 @@ func (folder *Folder) GetFiles(r Requester, course Course) error {
             filename := strings.ReplaceAll("out/"+course.Name+"/"+file.Filename, " ", "")
             _, err = os.Stat(filename)
             if forceDownloadAll || os.IsNotExist(err) {
-                go file.Download(course, r)
+                file.Download(course, r)
                 if err != nil {
                     return err
                 }
@@ -508,8 +508,6 @@ func GetRequester() (Requester, error) {
 	authToken := config.GetString("AuthToken")
 
 	headers := make(map[string]string)
-	fmt.Println("Using lib.AuthToken, %s", authToken)
-	fmt.Println("", authToken)
 
 	headers["Authorization"] = "Bearer " + authToken
 

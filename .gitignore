@@ -92,3 +92,4 @@ fabric.properties
 .env
 bin/
 config.yaml
+.zip
